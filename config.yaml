@@ -9,6 +9,10 @@ thresholds:
   DJIA: 0.012  # threshold for test case
   SP500: 0.015
 
-default_threshold_dod: 0.05
+default_threshold_dod: 0.01
 default_threshold_wow: 0.05
 anomaly_warning_limit: 0.20
+
+checks:
+  DoD: true
+  WoW: true

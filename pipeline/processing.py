@@ -22,7 +22,7 @@ def run_processing(aligned_df, config, enabled_checks):
     for ticker in tickers:
         dod = aligned_df[ticker].pct_change(periods=1)
         wow = aligned_df[ticker].pct_change(periods=5)
-        limit_dod = thresholds.get(ticker, config.get("default_threshold_dod", 0.05))
+        limit_dod = thresholds.get(ticker, config.get("default_threshold_dod", 0.01))
         limit_wow = config.get("default_threshold_wow", 0.05)
 
         for i in range(1, len(aligned_df)):
@@ -37,7 +37,11 @@ def run_processing(aligned_df, config, enabled_checks):
                     f"(|DoD|={abs(float(val_dod)):.4f} > {anomaly_limit})"
                 )
 
-            if pd.notna(val_dod) and abs(val_dod) > limit_dod:
+            if (
+                enabled_checks.get("DoD", True)
+                and pd.notna(val_dod)
+                and abs(val_dod) > limit_dod
+            ):
                 breach_list.append(
                     format_breach(
                         ticker,

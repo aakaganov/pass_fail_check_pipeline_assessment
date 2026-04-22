@@ -9,8 +9,6 @@ def run_pipeline(data_path="./data", enabled_checks = None):
     #setup paths/defaults
     if data_path is None:
         data_path = "./data/" # Production path
-    if enabled_checks is None:
-        enabled_checks = {'WoW' : True}
         
     # Make config loading independent of current working directory
     config_path = Path(__file__).resolve().parent / "config.yaml"
@@ -18,8 +16,15 @@ def run_pipeline(data_path="./data", enabled_checks = None):
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
+        checks_cfg = config.get("checks") or {}
+        merged_checks = {
+            "DoD": bool(checks_cfg.get("DoD", True)),
+            "WoW": bool(checks_cfg.get("WoW", True)),
+        }
+        if enabled_checks is not None:
+            merged_checks.update(enabled_checks)
         aligned_df, raw_dfs = run_ingestion(data_path, config["tickers"])
-        breach_df = run_processing(aligned_df, config, enabled_checks)
+        breach_df = run_processing(aligned_df, config, merged_checks)
         run_output(breach_df)
         return "SUCCESS", {
             "processed_data": raw_dfs,
