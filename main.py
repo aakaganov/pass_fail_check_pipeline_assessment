@@ -48,4 +48,7 @@ def run_pipeline(data_path="./data", enabled_checks = None):
         return f"REJECT: {msg}", None
 if __name__ == "__main__":
     cmd_path = sys.argv[1] if len(sys.argv) > 1 else None
-    run_pipeline(data_path=cmd_path)
+    status, data = run_pipeline(data_path=cmd_path)
+    print(status)
+    if data:
+        print(f"Breaches: {len(data['breach_report'])}")

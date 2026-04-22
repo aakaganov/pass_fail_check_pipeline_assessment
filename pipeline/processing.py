@@ -23,13 +23,12 @@ def run_processing(aligned_df, config, enabled_checks):
         dod = aligned_df[ticker].pct_change(periods=1)
         wow = aligned_df[ticker].pct_change(periods=5)
         limit_dod = thresholds.get(ticker, config.get("default_threshold_dod", 0.05))
-        # WoW uses its own default from config (not DoD’s).
         limit_wow = config.get("default_threshold_wow", 0.05)
 
         for i in range(1, len(aligned_df)):
             current_date = aligned_df.iloc[i]["observation_date"]
             current_price = aligned_df.iloc[i][ticker]
-
+            #DoD flagging
             val_dod = dod.iloc[i]
             # main.py returns WARNING: Extreme Volatility if the exception message contains this phrase.
             if pd.notna(val_dod) and abs(val_dod) > anomaly_limit:
