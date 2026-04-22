@@ -2,7 +2,7 @@ import pandas as pd
 import os
 import shutil
 import sys
-
+import unittest
 from main import run_pipeline # adapt if necessary once pipeline is implemented
 #Wrote tests independently, used gemini to help with set up of testing suite, wrote the individual tests myself unless otherwise marked
 #checked code/debugged with cursor
