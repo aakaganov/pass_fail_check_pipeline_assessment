@@ -23,18 +23,36 @@ class TestMarketPipeline(unittest.TestCase):
 
     def create_mock_environment(self, test_input_dict, markets_to_create=None):
         """
-        markets_to_create: List of tickers to actually build. 
-        If None, builds all 5.
+        Ensures all 5 tickers required by config.yaml exist in the sandbox.
+        If a test doesn't specify data for a ticker, it creates a dummy file
+        to allow the Inner Join to succeed.
         """
-        all_markets = ['DJCA', 'DJIA', 'DJTA', 'DJUA', 'SP500']
-        target_markets = markets_to_create if markets_to_create is not None else all_markets
-        
-        for m in target_markets:
+        all_required_tickers = ['DJCA', 'DJIA', 'DJTA', 'DJUA', 'SP500']
+        tickers_to_create = markets_to_create if markets_to_create is not None else all_required_tickers
+
+        fallback_dates = ['2026-01-01', '2026-01-02']
+        fallback_prices = [100.00, 100.00]
+        if test_input_dict:
+            first_key = next(iter(test_input_dict))
+            first_payload = test_input_dict[first_key]
+            if isinstance(first_payload, dict):
+                fallback_dates = first_payload.get('observation_date', fallback_dates)
+                fallback_prices = first_payload.get('closing_price', fallback_prices)
+
+        for m in tickers_to_create:
             file_path = os.path.join(self.test_data_dir, f"{m}.csv")
-            data = test_input_dict.get(m, {
-                'observation_date': ['2026-01-02', '2026-01-03'],
-                'closing_price': [100.00, 101.00]
-            })
+            
+            # 1. If the test provided specific data for this ticker, use it
+            if m in test_input_dict:
+                data = test_input_dict[m]
+            
+            # 2. Otherwise, create dummy data so Ingestion doesn't fail
+            else:
+                data = {
+                    'observation_date': fallback_dates,
+                    'closing_price': fallback_prices
+                }
+            
             pd.DataFrame(data).to_csv(file_path, index=False)
 
     def tearDown(self): # occurs between each test so that the next test starts with a clean environment
@@ -140,16 +158,20 @@ class TestMarketPipeline(unittest.TestCase):
 
     def test_holiday_null_value(self):
         """TEST: Handles a date with a blank price (NaN)."""
+        self.create_mock_environment({
+            'DJIA': {
+                'observation_date': ['2016-01-15', '2016-01-18', '2016-01-19'],
+                'closing_price': [582.79, 583.00, 591.87]
+            }
+        })
         csv_content = "observation_date,closing_price\n2016-01-15,582.79\n2016-01-18,\n2016-01-19,591.87\n"
         with open(os.path.join(self.test_data_dir, "DJIA.csv"), "w") as f:
             f.write(csv_content)
-        
-        self.create_mock_environment({})
         status, data = run_pipeline(data_path=self.test_data_dir)
         
         self.assertEqual(status, "SUCCESS")
         actual_change = data['processed_data']['DJIA'].iloc[-1]['daily_return']
-        self.assertAlmostEqual(actual_change, 0.0155, places=4)
+        self.assertAlmostEqual(actual_change, 0.01558, places=4)
     # --- CATEGORY 2: NUMERICAL ANOMALIES ---
 
     def test_negative_price(self):
@@ -249,28 +271,32 @@ class TestMarketPipeline(unittest.TestCase):
 
     def test_header_mismatch(self):
         """TEST: REJECT if column name is incorrect."""
+        self.create_mock_environment({})
         df = pd.DataFrame({'Date': ['2026-01-01'], 'closing_price': [100]})
         df.to_csv(os.path.join(self.test_data_dir, "DJIA.csv"), index=False)
-        self.create_mock_environment({'DJIA': df})
         status, data = run_pipeline(data_path=self.test_data_dir)
         self.assertEqual(status, "REJECT: Header mismatch")
 
     def test_trailing_whitespace_trim(self):
         """TEST: Whitespace is trimmed and parsed."""
+        self.create_mock_environment({
+            'DJIA': {
+                'observation_date': ['2026-04-17', '2026-04-18'],
+                'closing_price': [38000.00, 38100.00]
+            }
+        })
         df = pd.DataFrame({'observation_date': ['2026-04-17 ', '2026-04-18'], 'closing_price': [' 38000.00', '38100.00 ']})
         df.to_csv(os.path.join(self.test_data_dir, "DJIA.csv"), index=False)
-        self.create_mock_environment({})
         status, data = run_pipeline(data_path=self.test_data_dir)
-        self.assertEqual(data['processed_data']['DJIA'].iloc[0]['observation_date'], '2026-04-17')
+        self.assertEqual(data['processed_data']['DJIA'].iloc[0]['observation_date'].strftime('%Y-%m-%d'), '2026-04-17')
     def test_non_numeric_price(self):
         """TEST: Non-numeric placeholders N/A and '.' are rejected"""
+        self.create_mock_environment({})
         df = pd.DataFrame({
             'observation_date': ['2026-04-17', '2026-04-18'],
             'closing_price': ['N/A', '.']
         })
         df.to_csv(os.path.join(self.test_data_dir, "SP500.csv"), index=False)
-        self.create_mock_environment({})  # populate other required market files
-        
         status, _ = run_pipeline(data_path=self.test_data_dir)
         
         # Using assertIn because "Missing Price" might be part of a larger error string
@@ -278,9 +304,14 @@ class TestMarketPipeline(unittest.TestCase):
 
     def test_extreme_precision(self):
         """TEST: Rounding to 2 decimals."""
+        self.create_mock_environment({
+            'DJIA': {
+                'observation_date': ['2026-04-17'],
+                'closing_price': [38000.12]
+            }
+        })
         df = pd.DataFrame({'observation_date': ['2026-04-17'], 'closing_price': [38000.1234567]})
         df.to_csv(os.path.join(self.test_data_dir, "DJIA.csv"), index=False)
-        self.create_mock_environment({})
         status, data = run_pipeline(data_path=self.test_data_dir)
         self.assertAlmostEqual(data['processed_data']['DJIA'].iloc[0]['closing_price'], 38000.12, places=2)   
 
@@ -305,9 +336,9 @@ class TestMarketPipeline(unittest.TestCase):
 
     def test_comma_formatting(self):
         """TEST: Comma in price is parsed as float."""
+        self.create_mock_environment({})
         df = pd.DataFrame({'observation_date': ['2026-01-01'], 'closing_price': ['38,000.00']})
         df.to_csv(os.path.join(self.test_data_dir, "DJIA.csv"), index=False)
-        self.create_mock_environment({'DJIA': df})
         status, data = run_pipeline(data_path=self.test_data_dir)
         self.assertEqual(data['processed_data']['DJIA'].iloc[0]['closing_price'], 38000.00)
 if __name__ == '__main__':
