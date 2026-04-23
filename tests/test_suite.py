@@ -246,7 +246,7 @@ class TestMarketPipeline(unittest.TestCase):
         self.assertEqual(status, "REJECT: Date in wrong order")
 
     def test_duplicate_dates(self):
-        """TEST: Rejects if duplicate dates"""
+        """TEST: duplicate observation_date rows keep the first row (price wins)."""
         input_data = {
             'DJCA' : {
                 'observation_date' : ['2026-03-12', '2026-03-12'],
@@ -254,8 +254,11 @@ class TestMarketPipeline(unittest.TestCase):
             }
         }    
         self.create_mock_environment(input_data)
-        status, _ = run_pipeline(data_path=self.test_data_dir)
-        self.assertEqual(status, "REJECT: Duplicate Dates")
+        status, data = run_pipeline(data_path=self.test_data_dir)
+        self.assertEqual(status, "SUCCESS")
+        row = data['processed_data']['DJCA'].iloc[0]
+        self.assertEqual(str(row['observation_date'].date()), '2026-03-12')
+        self.assertEqual(row['closing_price'], 100.0)
     #--ALL TESTS PAST THIS POINT WERE SUGGESTED BY GEMINI HAS MISSING FROM TESTING SUITE--
     def test_empty_file(self):
         """TEST: Rejects if file empty"""

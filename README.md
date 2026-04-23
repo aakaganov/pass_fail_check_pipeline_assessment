@@ -2,6 +2,12 @@
 
 Historical US index CSVs are ingested, aligned on dates, and checked for large day-over-day (DoD) and week-over-week (WoW) moves. Breaches are written to `output/threshold_breaks.csv`. Thresholds and which checks run are controlled by `config.yaml`.
 
+## Assumptions/Explainations
+
+For Week over week, the definition is based on five trading rows previous on the aligned calendar, not "same weekday last calendar week". 
+
+Dates are alligned between files because given the context of all 5 of the data sets existing in the same context, which means when we are comparing trading dates it does not make sense for those trading dates to be non uniform when they all exist in the same context. This is done despite the fact that there is not comparisons across tickers, however it leaves room for future growth to compare between tickers. Additionally the way the code is structured, it is required that the observated dates are alligned
+
 ## Setup
 
 Use a virtual environment (recommended; avoids PEP 668 “externally managed” errors on macOS):
@@ -44,4 +50,4 @@ Output: `output/threshold_breaks.csv`. A small append-only log line is written b
 
 ## Disclosure
 
-Coding assistants (e.g. Cursor, ChatGPT) were permitted for this exercise; see comments in `tests/test_suite.py` and related notes in the repo.
+Coding assistants, specificially cursor and gemini, were used in this project. Utilized for tasks including debugging, ensuring a complete coverage of test suites, and production of this README file.  

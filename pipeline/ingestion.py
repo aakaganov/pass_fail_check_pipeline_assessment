@@ -9,7 +9,7 @@ def run_ingestion(data_path, tickers):
     for ticker in tickers:
         file_path = os.path.join(data_path, f"{ticker}.csv")
         if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Ticket file not found: {file_path}")
+            raise FileNotFoundError(f"Ticker file not found: {file_path}")
 
         df = pd.read_csv(file_path, skipinitialspace=True)
 
@@ -31,7 +31,7 @@ def run_ingestion(data_path, tickers):
 
         if df.empty:
             raise ValueError("empty file")
-
+        # date cleaning
         raw_dates = df["observation_date"].astype(str).str.strip()
         if raw_dates.str.fullmatch(r"[A-Za-z ]+").any():
             raise ValueError("Random string in column")
@@ -39,19 +39,20 @@ def run_ingestion(data_path, tickers):
             parsed_dates = pd.to_datetime(raw_dates, format="%Y-%m-%d", errors="raise")
         except Exception:
             raise ValueError("Date in wrong format")
-        if parsed_dates.duplicated().any():
-            raise ValueError("Duplicate Dates")
-        if not parsed_dates.is_monotonic_increasing:
-            raise ValueError("Date in wrong order")
         df["observation_date"] = parsed_dates
+        df = df.drop_duplicates(subset=["observation_date"], keep="first").reset_index(
+            drop=True
+        )
+        if not df["observation_date"].is_monotonic_increasing:
+            raise ValueError("Date in wrong order")
 
         # Price cleaning:
         # - reject explicit non-numeric placeholders (N/A, .)
         # - allow blank cells by dropping those rows (holiday gaps)
         raw_price_strings = df[price_col].astype(str).str.strip()
-        placeholder_mask = raw_price_strings.str.lower().isin({"n/a", "na", "."})
+        placeholder_mask = raw_price_strings.str.lower().isin({"n/a", "NA", "N/A", "na", "."})
         if placeholder_mask.any():
-            raise ValueError("Missing Price")
+            raise ValueError("Invalid Price")
 
         cleaned_prices = raw_price_strings.str.replace(",", "", regex=False)
         df["closing_price"] = pd.to_numeric(cleaned_prices, errors="coerce")
