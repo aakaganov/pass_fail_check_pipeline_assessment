@@ -68,7 +68,7 @@ def run_ingestion(data_path, tickers):
         raw_price_strings = df[price_col].astype(str).str.strip()
         placeholder_mask = raw_price_strings.str.lower().isin({"n/a", "NA", "N/A", "na", "."})
         if placeholder_mask.any():
-            raise ValueError("Invalid Price")
+            raise ValueError("Missing Price")
 
         cleaned_prices = raw_price_strings.str.replace(",", "", regex=False)
         df["closing_price"] = pd.to_numeric(cleaned_prices, errors="coerce")

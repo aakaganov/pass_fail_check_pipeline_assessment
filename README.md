@@ -38,7 +38,8 @@ Output: `output/threshold_breaks.csv`. A small append-only log line is written b
 
 - `tickers`: which `{TICKER}.csv` files to load from the data folder.
 - `thresholds`: optional per-ticker DoD threshold (decimal, e.g. `0.015` for 1.5%). Others use `default_threshold_dod` (default 1%).
-- `default_threshold_wow`: WoW threshold (default 5%).
+- `thresholds_wow`: optional per-ticker WoW threshold (decimal). Others use `default_threshold_wow` (default 5%).
+- `default_threshold_wow`: default WoW threshold when a ticker is not listed under `thresholds_wow`.
 - `checks`: `DoD` / `WoW` booleans to turn each check on or off.
 - `anomaly_warning_limit`: if any DoD move exceeds this magnitude, the pipeline returns `WARNING: Extreme Volatility` (see `main.py`).
 

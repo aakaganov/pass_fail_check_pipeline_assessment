@@ -1,3 +1,18 @@
+"""Apply DoD/WoW threshold rules to aligned index prices.
+
+Reads thresholds from config: thresholds (per-ticker DoD, optional),
+thresholds_wow (per-ticker WoW, optional), default_threshold_dod,
+default_threshold_wow, anomaly_warning_limit, and tickers.
+
+DoD uses pct_change(periods=1) on aligned_df; WoW uses five rows
+(pct_change(periods=5)). Breaches use strict |return| > limit.
+enabled_checks toggles DoD / WoW per run.
+
+Returns a DataFrame of breach rows (fixed columns when empty). Raises
+RuntimeError containing Extreme Volatility when |DoD| exceeds
+anomaly_warning_limit (surfaced as a warning in main.py).
+"""
+
 import pandas as pd
 
 # Stable schema when there are zero breaches (CSV + tests expect these columns).
@@ -13,22 +28,33 @@ _BREACH_COLUMNS = [
 
 
 def run_processing(aligned_df, config, enabled_checks):
+    """Scan aligned_df for DoD/WoW threshold breaches.
+
+    aligned_df must include observation_date and one numeric column per
+    ticker in config["tickers"]. enabled_checks is a dict with optional
+    DoD / WoW booleans (defaults True if missing).
+    """
     breach_list = []
     tickers = config.get("tickers", [])
-    thresholds = config.get("thresholds", {})
-    # Use config instead of a magic 0.2 so YAML stays the single source of truth.
+    thresholds_dod = config.get("thresholds", {})
+    thresholds_wow = config.get("thresholds_wow", {})
+    # default anomaly warning limit is 0.20
     anomaly_limit = config.get("anomaly_warning_limit", 0.20)
 
     for ticker in tickers:
-        dod = aligned_df[ticker].pct_change(periods=1)
-        wow = aligned_df[ticker].pct_change(periods=5)
-        limit_dod = thresholds.get(ticker, config.get("default_threshold_dod", 0.01))
-        limit_wow = config.get("default_threshold_wow", 0.05)
+        dod = aligned_df[ticker].pct_change(periods=1) # one market day change
+        wow = aligned_df[ticker].pct_change(periods=5) # 5 market day change
+        limit_dod = thresholds_dod.get(
+            ticker, config.get("default_threshold_dod", 0.01)
+        )
+        limit_wow = thresholds_wow.get(
+            ticker, config.get("default_threshold_wow", 0.05)
+        )
 
         for i in range(1, len(aligned_df)):
             current_date = aligned_df.iloc[i]["observation_date"]
             current_price = aligned_df.iloc[i][ticker]
-            #DoD flagging
+
             val_dod = dod.iloc[i]
             # main.py returns WARNING: Extreme Volatility if the exception message contains this phrase.
             if pd.notna(val_dod) and abs(val_dod) > anomaly_limit:
@@ -36,7 +62,7 @@ def run_processing(aligned_df, config, enabled_checks):
                     f"Extreme Volatility: {ticker} on {current_date} "
                     f"(|DoD|={abs(float(val_dod)):.4f} > {anomaly_limit})"
                 )
-
+            #DoD flagging
             if (
                 enabled_checks.get("DoD", True)
                 and pd.notna(val_dod)
@@ -53,6 +79,7 @@ def run_processing(aligned_df, config, enabled_checks):
                     )
                 )
 
+            #WoW flagging
             if enabled_checks.get("WoW", True) and i >= 5:
                 val_wow = wow.iloc[i]
                 if pd.notna(val_wow) and abs(val_wow) > limit_wow:
@@ -73,6 +100,7 @@ def run_processing(aligned_df, config, enabled_checks):
 
 
 def format_breach(ticker, date, current, previous, pct_diff, check_type):
+    """Build one breach row dict for CSV / API consumption."""
     return {
         "Ticker": ticker,
         "Date": date.strftime("%Y-%m-%d"),

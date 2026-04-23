@@ -75,6 +75,45 @@ class TestMarketPipeline(unittest.TestCase):
         tickers_flagged = [row['Ticker'] for row in data['breach_report']]
         self.assertIn('DJIA', tickers_flagged)
         self.assertNotIn('SP500', tickers_flagged)
+
+    def test_per_ticker_wow_threshold(self):
+        """WoW respects thresholds_wow per ticker (run_processing + explicit config)."""
+        from pipeline.processing import run_processing
+
+        aligned_df = pd.DataFrame(
+            {
+                "observation_date": pd.to_datetime(
+                    [
+                        "2026-01-01",
+                        "2026-01-02",
+                        "2026-01-03",
+                        "2026-01-04",
+                        "2026-01-05",
+                        "2026-01-08",
+                    ]
+                ),
+                "DJIA": [100.0, 100.0, 100.0, 100.0, 100.0, 106.0],
+                "SP500": [100.0, 100.0, 100.0, 100.0, 100.0, 106.0],
+            }
+        )
+        config = {
+            "tickers": ["DJIA", "SP500"],
+            "thresholds": {},
+            "thresholds_wow": {"SP500": 0.07},
+            "default_threshold_dod": 0.01,
+            "default_threshold_wow": 0.05,
+            "anomaly_warning_limit": 0.20,
+        }
+        breach_df = run_processing(
+            aligned_df,
+            config,
+            {"DoD": False, "WoW": True},
+        )
+        wow = breach_df[breach_df["Check_Type"] == "WoW"]
+        tickers = set(wow["Ticker"].tolist())
+        self.assertIn("DJIA", tickers)
+        self.assertNotIn("SP500", tickers)
+
     def test_week_over_week_flag(self):
         """TEST: Flags a 6% change over 5 trading days."""
         input_data = {
