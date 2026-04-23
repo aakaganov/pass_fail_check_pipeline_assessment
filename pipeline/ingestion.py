@@ -1,3 +1,19 @@
+"""Load index CSVs and align them on shared observation dates.
+
+For each ticker, reads {data_path}/{ticker}.csv, validates headers and dates,
+deduplicates same-day rows (first row kept), coerces prices (drops blank prices,
+rejects invalid placeholders and non-positive values), and stores a per-ticker
+frame including daily_return for inspection.
+
+Inner-joins all tickers on observation_date so aligned_df has one row per
+date where every configured index has a close. Returns (aligned_df, data_frames)
+where data_frames is ticker -> cleaned DataFrame.
+
+Raises FileNotFoundError if a file is missing; ValueError for bad schema,
+dates, or prices; RuntimeError with a WARNING: or REJECT: message when
+no overlapping dates remain after the join.
+"""
+
 import os
 
 import pandas as pd
@@ -8,9 +24,10 @@ def run_ingestion(data_path, tickers):
 
     for ticker in tickers:
         file_path = os.path.join(data_path, f"{ticker}.csv")
+        #if file does not exist, raise error
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Ticker file not found: {file_path}")
-
+        #read csv file into dataframe, trims white spaces
         df = pd.read_csv(file_path, skipinitialspace=True)
 
         # Header verification:
@@ -29,9 +46,10 @@ def run_ingestion(data_path, tickers):
         else:
             raise ValueError(f"Header mismatch in {ticker}.csv")
 
+        #if dataframe is empty, raise error
         if df.empty:
             raise ValueError("empty file")
-        # date cleaning
+        # date cleaning, checks if dates are in the correct format
         raw_dates = df["observation_date"].astype(str).str.strip()
         if raw_dates.str.fullmatch(r"[A-Za-z ]+").any():
             raise ValueError("Random string in column")
@@ -46,9 +64,7 @@ def run_ingestion(data_path, tickers):
         if not df["observation_date"].is_monotonic_increasing:
             raise ValueError("Date in wrong order")
 
-        # Price cleaning:
-        # - reject explicit non-numeric placeholders (N/A, .)
-        # - allow blank cells by dropping those rows (holiday gaps)
+        # Price cleaning, checks if prices are numeric and not empty, cleans commas
         raw_price_strings = df[price_col].astype(str).str.strip()
         placeholder_mask = raw_price_strings.str.lower().isin({"n/a", "NA", "N/A", "na", "."})
         if placeholder_mask.any():
@@ -56,13 +72,16 @@ def run_ingestion(data_path, tickers):
 
         cleaned_prices = raw_price_strings.str.replace(",", "", regex=False)
         df["closing_price"] = pd.to_numeric(cleaned_prices, errors="coerce")
+        #drops rows with na prices
         df = df.dropna(subset=["closing_price"]).copy()
         if df.empty:
             raise ValueError("empty file")
         if (df["closing_price"] <= 0).any():
             raise ValueError("Invalid Price")
 
+        #rounds prices to 2 decimal places
         df["closing_price"] = df["closing_price"].round(2)
+        #calculates daily returns
         df["daily_return"] = df["closing_price"].pct_change().fillna(0.0)
 
         data_frames[ticker] = df
