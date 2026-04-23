@@ -1,9 +1,23 @@
-import pandas as pd
 import os
 import shutil
+import subprocess
 import sys
 import unittest
-from main import run_pipeline # adapt if necessary once pipeline is implemented
+from pathlib import Path
+
+import pandas as pd
+
+from main import run_pipeline  
+
+_BREACH_CSV_COLUMNS = [
+    "Ticker",
+    "Date",
+    "Current_Value",
+    "Previous_Value",
+    "Difference_Num",
+    "Difference_Pct",
+    "Check_Type",
+]
 #Wrote tests independently, used gemini to help with set up of testing suite, wrote the individual tests myself unless otherwise marked
 #checked code/debugged with cursor
 class TestMarketPipeline(unittest.TestCase):
@@ -59,8 +73,7 @@ class TestMarketPipeline(unittest.TestCase):
         """Wipe files between tests so they don't interfere."""
         for f in os.listdir(self.test_data_dir):
             os.remove(os.path.join(self.test_data_dir, f))
-    #NOTE: DID A FEW DIFFERENT STYLES OF TEST TO SEE WHICH ONES WORK/IF THEY ALL WORK 
-    # --- CATEGORY 0: ESSENTIALS ---
+     # --- CATEGORY 0: ESSENTIALS ---
     def test_custom_threshold_logic(self):
         """TEST: SP500 ignores 1.2% change while DJIA flags it."""
         input_data = {
@@ -171,8 +184,121 @@ class TestMarketPipeline(unittest.TestCase):
         self.assertTrue(os.path.exists(output_path))
         
         df_output = pd.read_csv(output_path)
-        for col in ['Ticker', 'Date', 'Difference_Pct']:
+        for col in _BREACH_CSV_COLUMNS:
             self.assertIn(col, df_output.columns)
+    #--BOUNDARY TESTS--
+    def test_boundary_dod_not_flagged_at_exactly_one_percent(self):
+        """DoD uses strict > limit: exactly 1% default does not flag (per brief)."""
+        input_data = {
+            "DJIA": {
+                "observation_date": ["2026-01-01", "2026-01-02"],
+                "closing_price": [100.0, 101.0],
+            }
+        }
+        self.create_mock_environment(input_data)
+        status, data = run_pipeline(data_path=self.test_data_dir)
+        self.assertEqual(status, "SUCCESS")
+        dod_rows = [r for r in data["breach_report"] if r["Check_Type"] == "DoD"]
+        self.assertEqual(len(dod_rows), 0)
+
+    def test_boundary_wow_not_flagged_at_exactly_five_percent(self):
+        """WoW uses strict > limit: exactly 5% over 5 rows does not flag."""
+        dates = [
+            "2026-01-01",
+            "2026-01-02",
+            "2026-01-03",
+            "2026-01-04",
+            "2026-01-05",
+            "2026-01-08",
+        ]
+        prices = [100.0, 101.0, 102.0, 103.0, 104.0, 105.0]
+        input_data = {"DJIA": {"observation_date": dates, "closing_price": prices}}
+        self.create_mock_environment(input_data)
+        status, data = run_pipeline(data_path=self.test_data_dir)
+        self.assertEqual(status, "SUCCESS")
+        wow_rows = [r for r in data["breach_report"] if r["Check_Type"] == "WoW"]
+        self.assertEqual(len(wow_rows), 0)
+
+    def test_disabled_dod_via_enabled_checks(self):
+        """With DoD off, large daily moves are not reported; WoW can still flag."""
+        input_data = {
+            "DJIA": {
+                "observation_date": [
+                    "2026-01-01",
+                    "2026-01-02",
+                    "2026-01-03",
+                    "2026-01-04",
+                    "2026-01-05",
+                    "2026-01-08",
+                ],
+                "closing_price": [100, 100, 100, 100, 100, 106],
+            }
+        }
+        self.create_mock_environment(input_data)
+        status, data = run_pipeline(
+            data_path=self.test_data_dir,
+            enabled_checks={"DoD": False, "WoW": True},
+        )
+        self.assertEqual(status, "SUCCESS")
+        types = {r["Check_Type"] for r in data["breach_report"]}
+        self.assertIn("WoW", types)
+        self.assertNotIn("DoD", types)
+
+    def test_golden_breach_row_matches_price_math(self):
+        """One breach row matches (current - previous) / previous from aligned data."""
+        input_data = {
+            "DJIA": {
+                "observation_date": ["2026-01-01", "2026-01-02"],
+                "closing_price": [100.0, 105.0],
+            }
+        }
+        self.create_mock_environment(input_data)
+        status, data = run_pipeline(data_path=self.test_data_dir)
+        self.assertEqual(status, "SUCCESS")
+        dod_djia = next(
+            r
+            for r in data["breach_report"]
+            if r["Ticker"] == "DJIA" and r["Check_Type"] == "DoD"
+        )
+        self.assertEqual(dod_djia["Date"], "2026-01-02")
+        self.assertAlmostEqual(dod_djia["Current_Value"], 105.0, places=2)
+        self.assertAlmostEqual(dod_djia["Previous_Value"], 100.0, places=2)
+        self.assertAlmostEqual(dod_djia["Difference_Num"], 5.0, places=2)
+        self.assertAlmostEqual(dod_djia["Difference_Pct"], 0.05, places=4)
+
+    def test_breach_report_dict_has_required_fields(self):
+        """breach_report entries include all fields required for downstream CSV."""
+        input_data = {
+            "DJIA": {
+                "observation_date": ["2026-01-01", "2026-01-02"],
+                "closing_price": [100, 105],
+            }
+        }
+        self.create_mock_environment(input_data)
+        status, data = run_pipeline(data_path=self.test_data_dir)
+        self.assertEqual(status, "SUCCESS")
+        self.assertTrue(data["breach_report"])
+        for key in _BREACH_CSV_COLUMNS:
+            self.assertIn(key, data["breach_report"][0])
+
+    def test_cli_main_accepts_data_path_argument(self):
+        """python main.py <folder> runs against that folder (smoke test)."""
+        repo_root = Path(__file__).resolve().parent.parent
+        main_py = repo_root / "main.py"
+        self.create_mock_environment(
+            {"DJIA": {"observation_date": ["2026-01-01", "2026-01-02"], "closing_price": [100, 105]}}
+        )
+        abs_data = str(Path(self.test_data_dir).resolve())
+        proc = subprocess.run(
+            [sys.executable, str(main_py), abs_data],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("SUCCESS", proc.stdout)
+
     # --- CATEGORY 1: MARKET TIMING ---
 
     def test_weekend_gap(self):

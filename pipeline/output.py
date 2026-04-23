@@ -4,7 +4,7 @@ Writes ``./output/threshold_breaks.csv`` (relative to the process current workin
 directory) from the breach DataFrame. Appends one line to ``mock_test_log.txt``
 in the cwd with a timestamp and breach count.
 
-Paths are not anchored to ``__file__``; run from the project root (or pass
+Paths are not anchored to __file__; run from the project root (or pass
 absolute paths if this module is extended later).
 """
 
@@ -13,9 +13,9 @@ from datetime import datetime
 
 
 def run_output(breach_df):
-    """Write ``breach_df`` to CSV and append a short audit log line.
+    """Write breach_df to CSV and append a short audit log line.
 
-    Creates ``./output`` if missing. Returns ``True`` when finished (callers
+    Creates ./output if missing. Returns True when finished (callers
     may ignore the return value).
     """
     # Write breach report to csv

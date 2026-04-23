@@ -5,7 +5,9 @@ thresholds_wow (per-ticker WoW, optional), default_threshold_dod,
 default_threshold_wow, anomaly_warning_limit, and tickers.
 
 DoD uses pct_change(periods=1) on aligned_df; WoW uses five rows
-(pct_change(periods=5)). Breaches use strict |return| > limit.
+(pct_change(periods=5)). Breaches use strict |return| > limit after rounding
+both sides to mitigate float noise from pct_change (so e.g. nominal 1% is not
+flagged when the limit is 1%).
 enabled_checks toggles DoD / WoW per run.
 
 Returns a DataFrame of breach rows (fixed columns when empty). Raises
@@ -25,6 +27,25 @@ _BREACH_COLUMNS = [
     "Difference_Pct",
     "Check_Type",
 ]
+
+# Decimal places for comparing returns to YAML limits (float-safe strict >).
+_RETURN_COMPARE_DECIMALS = 10
+
+
+def _abs_return_strictly_exceeds(raw_pct, limit):
+    """True if |raw_pct| is strictly greater than limit after rounding.
+
+    pandas pct_change can be a few ULP away from the rational value;
+    rounding aligns comparisons with the brief (e.g. exactly 1% vs a 1% cap).
+
+    Previous use without function ended up flagging 1% changes when the limit was
+    set to 1%,
+    """
+    if pd.isna(raw_pct):
+        return False
+    mag = round(abs(float(raw_pct)), _RETURN_COMPARE_DECIMALS)
+    lim = round(float(limit), _RETURN_COMPARE_DECIMALS)
+    return mag > lim
 
 
 def run_processing(aligned_df, config, enabled_checks):
@@ -57,7 +78,7 @@ def run_processing(aligned_df, config, enabled_checks):
 
             val_dod = dod.iloc[i]
             # main.py returns WARNING: Extreme Volatility if the exception message contains this phrase.
-            if pd.notna(val_dod) and abs(val_dod) > anomaly_limit:
+            if _abs_return_strictly_exceeds(val_dod, anomaly_limit):
                 raise RuntimeError(
                     f"Extreme Volatility: {ticker} on {current_date} "
                     f"(|DoD|={abs(float(val_dod)):.4f} > {anomaly_limit})"
@@ -66,7 +87,7 @@ def run_processing(aligned_df, config, enabled_checks):
             if (
                 enabled_checks.get("DoD", True)
                 and pd.notna(val_dod)
-                and abs(val_dod) > limit_dod
+                and _abs_return_strictly_exceeds(val_dod, limit_dod)
             ):
                 breach_list.append(
                     format_breach(
@@ -82,7 +103,9 @@ def run_processing(aligned_df, config, enabled_checks):
             #WoW flagging
             if enabled_checks.get("WoW", True) and i >= 5:
                 val_wow = wow.iloc[i]
-                if pd.notna(val_wow) and abs(val_wow) > limit_wow:
+                if pd.notna(val_wow) and _abs_return_strictly_exceeds(
+                    val_wow, limit_wow
+                ):
                     breach_list.append(
                         format_breach(
                             ticker,
