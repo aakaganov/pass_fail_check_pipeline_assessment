@@ -14,9 +14,12 @@ _BREACH_CSV_COLUMNS = [
     "Date",
     "Current_Value",
     "Previous_Value",
+    "Previous_Date",
     "Difference_Num",
     "Difference_Pct",
     "Check_Type",
+    "Threshold_Applied",
+    "Direction",
 ]
 #Wrote tests independently, used gemini to help with set up of testing suite, wrote the individual tests myself unless otherwise marked
 #checked code/debugged with cursor
@@ -265,6 +268,33 @@ class TestMarketPipeline(unittest.TestCase):
         self.assertAlmostEqual(dod_djia["Previous_Value"], 100.0, places=2)
         self.assertAlmostEqual(dod_djia["Difference_Num"], 5.0, places=2)
         self.assertAlmostEqual(dod_djia["Difference_Pct"], 0.05, places=4)
+        self.assertEqual(dod_djia["Previous_Date"], "2026-01-01")
+        self.assertEqual(dod_djia["Direction"], "up")
+        self.assertAlmostEqual(dod_djia["Threshold_Applied"], 0.01, places=6)
+
+    def test_wow_breach_previous_date_and_threshold(self):
+        """WoW row documents five-rows-back date and WoW threshold for audit."""
+        input_data = {
+            "DJIA": {
+                "observation_date": [
+                    "2026-01-01",
+                    "2026-01-02",
+                    "2026-01-03",
+                    "2026-01-04",
+                    "2026-01-05",
+                    "2026-01-08",
+                ],
+                "closing_price": [100, 100, 100, 100, 100, 106],
+            }
+        }
+        self.create_mock_environment(input_data)
+        status, data = run_pipeline(data_path=self.test_data_dir)
+        self.assertEqual(status, "SUCCESS")
+        wow = next(r for r in data["breach_report"] if r["Check_Type"] == "WoW")
+        self.assertEqual(wow["Date"], "2026-01-08")
+        self.assertEqual(wow["Previous_Date"], "2026-01-01")
+        self.assertEqual(wow["Direction"], "up")
+        self.assertAlmostEqual(wow["Threshold_Applied"], 0.05, places=6)
 
     def test_breach_report_dict_has_required_fields(self):
         """breach_report entries include all fields required for downstream CSV."""

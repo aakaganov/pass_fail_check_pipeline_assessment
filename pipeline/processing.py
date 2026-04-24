@@ -23,9 +23,12 @@ _BREACH_COLUMNS = [
     "Date",
     "Current_Value",
     "Previous_Value",
+    "Previous_Date",
     "Difference_Num",
     "Difference_Pct",
     "Check_Type",
+    "Threshold_Applied",
+    "Direction",
 ]
 
 # Decimal places for comparing returns to YAML limits (float-safe strict >).
@@ -97,6 +100,8 @@ def run_processing(aligned_df, config, enabled_checks):
                         aligned_df.iloc[i - 1][ticker],
                         val_dod,
                         "DoD",
+                        threshold_applied=limit_dod,
+                        previous_date=aligned_df.iloc[i - 1]["observation_date"],
                     )
                 )
 
@@ -114,6 +119,8 @@ def run_processing(aligned_df, config, enabled_checks):
                             aligned_df.iloc[i - 5][ticker],
                             val_wow,
                             "WoW",
+                            threshold_applied=limit_wow,
+                            previous_date=aligned_df.iloc[i - 5]["observation_date"],
                         )
                     )
 
@@ -122,14 +129,37 @@ def run_processing(aligned_df, config, enabled_checks):
     return pd.DataFrame(breach_list)
 
 
-def format_breach(ticker, date, current, previous, pct_diff, check_type):
+def _direction_from_return(pct_diff):
+    x = float(pct_diff)
+    if x > 0:
+        return "up"
+    if x < 0:
+        return "down"
+    return "flat"
+
+
+def format_breach(
+    ticker,
+    date,
+    current,
+    previous,
+    pct_diff,
+    check_type,
+    *,
+    threshold_applied,
+    previous_date,
+):
     """Build one breach row dict for CSV / API consumption."""
+    prev_ts = pd.Timestamp(previous_date)
     return {
         "Ticker": ticker,
         "Date": date.strftime("%Y-%m-%d"),
         "Current_Value": round(current, 2),
         "Previous_Value": round(previous, 2),
+        "Previous_Date": prev_ts.strftime("%Y-%m-%d"),
         "Difference_Num": round(current - previous, 2),
         "Difference_Pct": round(pct_diff, 4),
         "Check_Type": check_type,
+        "Threshold_Applied": round(float(threshold_applied), 6),
+        "Direction": _direction_from_return(pct_diff),
     }
