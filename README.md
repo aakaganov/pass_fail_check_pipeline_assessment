@@ -26,13 +26,19 @@ If the project path contains a colon (`:`), creating `.venv` inside the repo may
 /tmp/pass_fail_pipeline_venv/bin/python main.py
 ```
 
-Optional: pass a data directory (defaults to `./data`):
+Data directory (defaults to `./data`):
 
 ```bash
+/tmp/pass_fail_pipeline_venv/bin/python main.py --data-dir /path/to/csv_folder
+# backward-compatible positional:
 /tmp/pass_fail_pipeline_venv/bin/python main.py /path/to/csv_folder
 ```
 
-Output: `output/threshold_breaks.csv`. A small append-only log line is written by `pipeline/output.py` (see that file for the log path).
+Other flags (see `python main.py --help`): `--config`, `--output-dir`, `--csv-path`, `--log-path`. `--output-dir` and `--csv-path` are mutually exclusive.
+
+**Exit codes** (for CI and scripts): `0` = success, `1` = reject or unexpected error, `2` = warning (e.g. extreme volatility).
+
+Output: by default `output/threshold_breaks.csv` and an append-only log beside it (`pipeline/output.py`).
 
 ## Configuration (`config.yaml`)
 
@@ -41,7 +47,7 @@ Output: `output/threshold_breaks.csv`. A small append-only log line is written b
 - `thresholds_wow`: optional per-ticker WoW threshold (decimal). Others use `default_threshold_wow` (default 5%).
 - `default_threshold_wow`: default WoW threshold when a ticker is not listed under `thresholds_wow`.
 - `checks`: `DoD` / `WoW` booleans to turn each check on or off.
-- `anomaly_warning_limit`: if any DoD move exceeds this magnitude, the pipeline returns `WARNING: Extreme Volatility` (see `main.py`).
+- `anomaly_warning_limit`: if any DoD move exceeds this magnitude, the pipeline returns `WARNING: Extreme Volatility` and the CLI exits with code `2` (see `main.py`).
 
 ## Tests
 

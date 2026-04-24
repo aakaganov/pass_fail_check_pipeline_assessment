@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from main import run_pipeline  
+from main import exit_code_for_status, run_pipeline  
 
 _BREACH_CSV_COLUMNS = [
     "Ticker",
@@ -312,7 +312,25 @@ class TestMarketPipeline(unittest.TestCase):
             self.assertIn(key, data["breach_report"][0])
 
     def test_cli_main_accepts_data_path_argument(self):
-        """python main.py <folder> runs against that folder (smoke test)."""
+        """python main.py --data-dir <folder> runs against that folder (smoke test)."""
+        repo_root = Path(__file__).resolve().parent.parent
+        main_py = repo_root / "main.py"
+        self.create_mock_environment(
+            {"DJIA": {"observation_date": ["2026-01-01", "2026-01-02"], "closing_price": [100, 105]}}
+        )
+        abs_data = str(Path(self.test_data_dir).resolve())
+        proc = subprocess.run(
+            [sys.executable, str(main_py), "--data-dir", abs_data],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("SUCCESS", proc.stdout)
+
+    def test_cli_legacy_positional_data_dir_still_works(self):
+        """Optional positional data dir remains supported."""
         repo_root = Path(__file__).resolve().parent.parent
         main_py = repo_root / "main.py"
         self.create_mock_environment(
@@ -328,6 +346,48 @@ class TestMarketPipeline(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("SUCCESS", proc.stdout)
+
+    def test_exit_code_for_status(self):
+        self.assertEqual(exit_code_for_status("SUCCESS"), 0)
+        self.assertEqual(exit_code_for_status("WARNING: Extreme Volatility"), 2)
+        self.assertEqual(exit_code_for_status("REJECT: Missing Files"), 1)
+
+    def test_cli_reject_uses_exit_code_one(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        main_py = repo_root / "main.py"
+        self.create_mock_environment({}, markets_to_create=["DJIA", "SP500"])
+        abs_data = str(Path(self.test_data_dir).resolve())
+        proc = subprocess.run(
+            [sys.executable, str(main_py), "--data-dir", abs_data],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("REJECT:", proc.stdout)
+
+    def test_cli_warning_uses_exit_code_two(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        main_py = repo_root / "main.py"
+        self.create_mock_environment(
+            {
+                "DJTA": {
+                    "observation_date": ["2026-01-03", "2026-01-04"],
+                    "closing_price": [100.00, 10000.00],
+                }
+            }
+        )
+        abs_data = str(Path(self.test_data_dir).resolve())
+        proc = subprocess.run(
+            [sys.executable, str(main_py), "--data-dir", abs_data],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("WARNING:", proc.stdout)
 
     # --- CATEGORY 1: MARKET TIMING ---
 
