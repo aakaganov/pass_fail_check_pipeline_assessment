@@ -42,6 +42,8 @@ Output: by default `output/threshold_breaks.csv` and an append-only log beside i
 
 ## Configuration (`config.yaml`)
 
+After load, the file is validated (`pipeline/config_validate.py`): required non-empty `tickers`, numeric thresholds in `(0, 1]`, only known top-level keys, and `checks` limited to `DoD` / `WoW` with boolean values. Invalid config returns `REJECT: Invalid config: …` without running ingestion.
+
 - `tickers`: which `{TICKER}.csv` files to load from the data folder.
 - `thresholds`: optional per-ticker DoD threshold (decimal, e.g. `0.015` for 1.5%). Others use `default_threshold_dod` (default 1%).
 - `thresholds_wow`: optional per-ticker WoW threshold (decimal). Others use `default_threshold_wow` (default 5%).

@@ -19,6 +19,7 @@ from pathlib import Path
 
 import yaml
 
+from pipeline.config_validate import validate_pipeline_config
 from pipeline.ingestion import run_ingestion
 from pipeline.output import run_output
 from pipeline.processing import run_processing
@@ -50,6 +51,7 @@ def run_pipeline(
     try:
         with open(cfg, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
+        validate_pipeline_config(config)
         checks_cfg = config.get("checks") or {}
         merged_checks = {
             "DoD": bool(checks_cfg.get("DoD", True)),

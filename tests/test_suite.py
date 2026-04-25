@@ -2,12 +2,14 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 import pandas as pd
 
-from main import exit_code_for_status, run_pipeline  
+from main import exit_code_for_status, run_pipeline
+from pipeline.config_validate import validate_pipeline_config
 
 _BREACH_CSV_COLUMNS = [
     "Ticker",
@@ -599,5 +601,56 @@ class TestMarketPipeline(unittest.TestCase):
         df.to_csv(os.path.join(self.test_data_dir, "DJIA.csv"), index=False)
         status, data = run_pipeline(data_path=self.test_data_dir)
         self.assertEqual(data['processed_data']['DJIA'].iloc[0]['closing_price'], 38000.00)
+
+
+class TestConfigValidation(unittest.TestCase):
+    """validate_pipeline_config and run_pipeline reject bad YAML early."""
+
+    def test_validate_accepts_minimal_valid_config(self):
+        validate_pipeline_config(
+            {
+                "tickers": ["DJIA"],
+                "thresholds": {"SP500": 0.015},
+                "checks": {"DoD": True, "WoW": False},
+            }
+        )
+
+    def test_validate_rejects_unknown_top_level_key(self):
+        with self.assertRaises(ValueError) as ctx:
+            validate_pipeline_config({"tickers": ["X"], "typo_thresholds": {}})
+        self.assertIn("unknown top-level", str(ctx.exception))
+
+    def test_validate_rejects_empty_tickers(self):
+        with self.assertRaises(ValueError) as ctx:
+            validate_pipeline_config({"tickers": []})
+        self.assertIn("non-empty", str(ctx.exception))
+
+    def test_validate_rejects_threshold_above_one(self):
+        with self.assertRaises(ValueError) as ctx:
+            validate_pipeline_config({"tickers": ["DJIA"], "thresholds": {"DJIA": 1.01}})
+        self.assertIn("thresholds", str(ctx.exception))
+
+    def test_validate_checks_rejects_unknown_check_name(self):
+        with self.assertRaises(ValueError) as ctx:
+            validate_pipeline_config(
+                {"tickers": ["DJIA"], "checks": {"DoD": True, "Daily": True}}
+            )
+        self.assertIn("DoD and WoW", str(ctx.exception))
+
+    def test_run_pipeline_rejects_invalid_config_file(self):
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
+            f.write("tickers: []\n")
+            path = f.name
+        try:
+            status, data = run_pipeline(data_path="./data", config_path=path)
+            self.assertIsNone(data)
+            self.assertIn("REJECT:", status)
+            self.assertIn("Invalid config", status)
+        finally:
+            os.unlink(path)
+
+
 if __name__ == '__main__':
     unittest.main()
