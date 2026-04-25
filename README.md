@@ -10,6 +10,8 @@ Dates are alligned between files because given the context of all 5 of the data 
 
 ## Setup
 
+**Python:** use **3.10 or newer** (3.12 is fine). Dependencies in `requirements.txt` are pinned so another machine gets the same library versions.
+
 Use a virtual environment (recommended; avoids PEP 668 “externally managed” errors on macOS):
 
 ```bash
