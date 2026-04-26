@@ -2,11 +2,36 @@
 
 Historical US index CSVs are ingested, aligned on dates, and checked for large day-over-day (DoD) and week-over-week (WoW) moves. Breaches are written to `output/threshold_breaks.csv`. Thresholds and which checks run are controlled by `config.yaml`.
 
-## Assumptions/Explainations
+## Pipeline flow
 
-For Week over week, the definition is based on five trading rows previous on the aligned calendar, not "same weekday last calendar week". 
+End-to-end path (orchestrated in `main.py`; stages live under `pipeline/`):
 
-Dates are alligned between files because given the context of all 5 of the data sets existing in the same context, which means when we are comparing trading dates it does not make sense for those trading dates to be non uniform when they all exist in the same context. This is done despite the fact that there is not comparisons across tickers, however it leaves room for future growth to compare between tickers. Additionally the way the code is structured, it is required that the observated dates are alligned
+```mermaid
+flowchart TD
+  subgraph in1 [Inputs]
+    C[config.yaml]
+    S[Index CSVs]
+  end
+  C --> V[Load + validate config]
+  V --> I[Ingest + align on dates]
+  S --> I
+  I --> P[Apply DoD / WoW rules]
+  P --> O[Write breach CSV + append pipeline_run.log]
+```
+
+Same flow in plain text:
+
+```text
+config.yaml  --->  validate  --->  ingest + align  --->  process (DoD/WoW)  --->  CSV + pipeline_run.log
+                         ^                ^
+                         |            index CSVs
+```
+
+## Assumptions / explanations
+
+For week-over-week, the definition is **five trading rows back** on the aligned calendar, not “same weekday last calendar week.”
+
+Dates are **aligned** across files (inner join on `observation_date`) so each row has a close for every configured ticker. That keeps comparisons consistent when all series share the same calendar context and leaves room for cross-ticker logic later. The pipeline requires those observed dates to stay aligned.
 
 ## Setup
 
@@ -40,7 +65,7 @@ Other flags (see `python main.py --help`): `--config`, `--output-dir`, `--csv-pa
 
 **Exit codes** (for CI and scripts): `0` = success, `1` = reject or unexpected error, `2` = warning (e.g. extreme volatility).
 
-Output: by default `output/threshold_breaks.csv` and an append-only log beside it (`pipeline/output.py`).
+Output: by default `output/threshold_breaks.csv` and append-only `output/pipeline_run.log` ([`pipeline/output.py`](pipeline/output.py)). Override paths with `--output-dir`, `--csv-path`, or `--log-path`.
 
 ## Configuration (`config.yaml`)
 
@@ -53,6 +78,12 @@ After load, the file is validated (`pipeline/config_validate.py`): required non-
 - `checks`: `DoD` / `WoW` booleans to turn each check on or off.
 - `anomaly_warning_limit`: if any DoD move exceeds this magnitude, the pipeline returns `WARNING: Extreme Volatility` and the CLI exits with code `2` (see `main.py`).
 
+Missing config file (wrong `--config` path): `REJECT: Config not found`. Missing ticker CSV under `--data-dir`: `REJECT: Missing Files`.
+
+## Static YAML vs database configuration
+
+This project uses **YAML** next to the code: thresholds and check toggles are **versioned in git**, reviewable in PRs, and need no database or credentials for a batch run. A **database** (or config service) fits better when thresholds are **per-tenant**, edited through a **product UI**, change **often without a deploy**, or must be queried by many services at runtime. For a scheduled index check like this take-home, static config is the simpler and more reproducible fit.
+
 ## Tests
 
 ```bash
@@ -61,4 +92,4 @@ After load, the file is validated (`pipeline/config_validate.py`): required non-
 
 ## Disclosure
 
-Coding assistants, specificially cursor and gemini, were used in this project. Utilized for tasks including debugging, ensuring a complete coverage of test suites, and production of this README file.  
+Coding assistants, specifically Cursor and Gemini, were used in this project (debugging, tests, README, and parts of the implementation). See also the disclosure note in `main.py`.

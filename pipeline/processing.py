@@ -66,8 +66,8 @@ def run_processing(aligned_df, config, enabled_checks):
     anomaly_limit = config.get("anomaly_warning_limit", 0.20)
 
     for ticker in tickers:
-        dod = aligned_df[ticker].pct_change(periods=1) # one market day change
-        wow = aligned_df[ticker].pct_change(periods=5) # 5 market day change
+        dod = aligned_df[ticker].pct_change(periods=1)  # One trading day.
+        wow = aligned_df[ticker].pct_change(periods=5)  # Five trading rows back.
         limit_dod = thresholds_dod.get(
             ticker, config.get("default_threshold_dod", 0.01)
         )
@@ -86,7 +86,7 @@ def run_processing(aligned_df, config, enabled_checks):
                     f"Extreme Volatility: {ticker} on {current_date} "
                     f"(|DoD|={abs(float(val_dod)):.4f} > {anomaly_limit})"
                 )
-            #DoD flagging
+            # DoD flagging.
             if (
                 enabled_checks.get("DoD", True)
                 and pd.notna(val_dod)
@@ -105,7 +105,7 @@ def run_processing(aligned_df, config, enabled_checks):
                     )
                 )
 
-            #WoW flagging
+            # WoW flagging.
             if enabled_checks.get("WoW", True) and i >= 5:
                 val_wow = wow.iloc[i]
                 if pd.notna(val_wow) and _abs_return_strictly_exceeds(

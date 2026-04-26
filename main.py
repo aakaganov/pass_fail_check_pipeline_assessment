@@ -10,6 +10,9 @@ and CSV output.
 
 CLI exit codes (for shells and CI): 0 success, 1 reject / error, 2 warning.
 Use ``python main.py --help`` for flags.
+
+Disclosure: coding assistants (e.g. Cursor) were used for parts of this
+project; see README for detail. Per take-home policy, disclose in code here.
 """
 from __future__ import annotations
 
@@ -46,11 +49,15 @@ def run_pipeline(
     if data_path is None:
         data_path = "./data/"
 
-    cfg = Path(config_path) if config_path is not None else Path(__file__).resolve().parent / "config.yaml"
+    _default_config = Path(__file__).resolve().parent / "config.yaml"
+    cfg = Path(config_path) if config_path is not None else _default_config
 
     try:
-        with open(cfg, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
+        try:
+            with open(cfg, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+        except FileNotFoundError:
+            return "REJECT: Config not found", None
         validate_pipeline_config(config)
         checks_cfg = config.get("checks") or {}
         merged_checks = {
@@ -119,7 +126,7 @@ def _build_arg_parser():
         "--output-dir",
         default=None,
         metavar="DIR",
-        help="Write threshold_breaks.csv and mock_test_log.txt under this directory.",
+        help="Write threshold_breaks.csv and pipeline_run.log under this directory.",
     )
     out.add_argument(
         "--csv-path",

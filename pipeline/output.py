@@ -2,8 +2,8 @@
 
 By default writes ``output/threshold_breaks.csv`` under the **repository root**
 (the directory that contains ``main.py``). Optional ``output_dir`` /
-``csv_path`` override that. Appends one line to the run log next to the CSV
-(default ``output/mock_test_log.txt``).
+``csv_path`` override that. Appends one line to ``pipeline_run.log`` next to the
+CSV unless ``log_path`` is set.
 
 ``pipeline/`` is one level below the repo root, so the root is resolved from
 ``Path(__file__).resolve().parent.parent``.
@@ -12,31 +12,36 @@ By default writes ``output/threshold_breaks.csv`` under the **repository root**
 from datetime import datetime
 from pathlib import Path
 
+# Default log filename next to the breach CSV (single place to rename if needed).
+RUN_LOG_FILENAME = "pipeline_run.log"
+
 # Repo root = parent of ``pipeline/`` (this file lives in ``pipeline/``).
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_OUTPUT_DIR = _REPO_ROOT / "output"
 _DEFAULT_CSV_PATH = _DEFAULT_OUTPUT_DIR / "threshold_breaks.csv"
-_DEFAULT_LOG_PATH = _DEFAULT_OUTPUT_DIR / "mock_test_log.txt"
+_DEFAULT_LOG_PATH = _DEFAULT_OUTPUT_DIR / RUN_LOG_FILENAME
 
 
 def run_output(breach_df, *, output_dir=None, csv_path=None, log_path=None):
     """Write breach_df to CSV and append a short audit log line.
 
     If ``csv_path`` is set, the CSV is written there (parents created). The log
-    defaults to ``<csv_dir>/mock_test_log.txt`` unless ``log_path`` is given.
+    defaults to ``<csv_dir>/pipeline_run.log`` unless ``log_path`` is given.
 
     If only ``output_dir`` is set, uses ``threshold_breaks.csv`` and
-    ``mock_test_log.txt`` inside that directory.
+    ``pipeline_run.log`` inside that directory.
 
     With all arguments omitted, uses ``output/`` under the repo root.
     """
     if csv_path is not None:
         csv_file = Path(csv_path)
-        log_file = Path(log_path) if log_path is not None else csv_file.parent / "mock_test_log.txt"
+        log_file = (
+            Path(log_path) if log_path is not None else csv_file.parent / RUN_LOG_FILENAME
+        )
     elif output_dir is not None:
         out = Path(output_dir)
         csv_file = out / "threshold_breaks.csv"
-        log_file = Path(log_path) if log_path is not None else out / "mock_test_log.txt"
+        log_file = Path(log_path) if log_path is not None else out / RUN_LOG_FILENAME
     else:
         csv_file = _DEFAULT_CSV_PATH
         log_file = Path(log_path) if log_path is not None else _DEFAULT_LOG_PATH

@@ -24,10 +24,10 @@ def run_ingestion(data_path, tickers):
 
     for ticker in tickers:
         file_path = os.path.join(data_path, f"{ticker}.csv")
-        #if file does not exist, raise error
+        # If file does not exist, raise error.
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Ticker file not found: {file_path}")
-        #read csv file into dataframe, trims white spaces
+        # Read CSV into DataFrame; skipinitialspace trims leading spaces in fields.
         df = pd.read_csv(file_path, skipinitialspace=True)
 
         # Header verification:
@@ -46,7 +46,7 @@ def run_ingestion(data_path, tickers):
         else:
             raise ValueError(f"Header mismatch in {ticker}.csv")
 
-        #if dataframe is empty, raise error
+        # If dataframe is empty, raise error.
         if df.empty:
             raise ValueError("empty file")
         # date cleaning, checks if dates are in the correct format
@@ -72,14 +72,14 @@ def run_ingestion(data_path, tickers):
 
         cleaned_prices = raw_price_strings.str.replace(",", "", regex=False)
         df["closing_price"] = pd.to_numeric(cleaned_prices, errors="coerce")
-        #drops rows with na prices
+        # Drop rows with NA prices.
         df = df.dropna(subset=["closing_price"]).copy()
         if df.empty:
             raise ValueError("empty file")
         if (df["closing_price"] <= 0).any():
             raise ValueError("Invalid Price")
 
-        #rounds prices to 2 decimal places
+        # Round prices to 2 decimal places.
         df["closing_price"] = df["closing_price"].round(2)
         #calculates daily returns
         df["daily_return"] = df["closing_price"].pct_change().fillna(0.0)

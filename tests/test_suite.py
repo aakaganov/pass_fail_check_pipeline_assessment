@@ -23,8 +23,11 @@ _BREACH_CSV_COLUMNS = [
     "Threshold_Applied",
     "Direction",
 ]
-#Wrote tests independently, used gemini to help with set up of testing suite, wrote the individual tests myself unless otherwise marked
-#checked code/debugged with cursor
+
+# Wrote tests independently; used Gemini for initial test harness setup.
+# Individual tests written by author unless noted; checked/debugged with Cursor.
+
+
 class TestMarketPipeline(unittest.TestCase):
 
     @classmethod
@@ -74,16 +77,23 @@ class TestMarketPipeline(unittest.TestCase):
             
             pd.DataFrame(data).to_csv(file_path, index=False)
 
-    def tearDown(self): # occurs between each test so that the next test starts with a clean environment
+    def tearDown(self):  # Reset temp data between tests.
         """Wipe files between tests so they don't interfere."""
         for f in os.listdir(self.test_data_dir):
             os.remove(os.path.join(self.test_data_dir, f))
-     # --- CATEGORY 0: ESSENTIALS ---
+
+    # --- CATEGORY 0: ESSENTIALS ---
     def test_custom_threshold_logic(self):
         """TEST: SP500 ignores 1.2% change while DJIA flags it."""
         input_data = {
-            'DJIA': {'observation_date': ['2026-01-01', '2026-01-02'], 'closing_price': [100, 101.2]}, # 1.2% (Flag!)
-            'SP500': {'observation_date': ['2026-01-01', '2026-01-02'], 'closing_price': [100, 101.2]} # 1.2% (Ignore!)
+            'DJIA': {
+                'observation_date': ['2026-01-01', '2026-01-02'],
+                'closing_price': [100, 101.2],
+            },  # 1.2% (flag)
+            'SP500': {
+                'observation_date': ['2026-01-01', '2026-01-02'],
+                'closing_price': [100, 101.2],
+            },  # 1.2% (ignore for SP500 threshold)
         }
         self.create_mock_environment(input_data)
         status, data = run_pipeline(data_path=self.test_data_dir)
@@ -183,15 +193,14 @@ class TestMarketPipeline(unittest.TestCase):
         """TEST: Verifies threshold_breaks.csv is created correctly."""
         input_data = {'DJIA': {'observation_date': ['2026-01-01', '2026-01-02'], 'closing_price': [100, 105]}}
         self.create_mock_environment(input_data)
-        
-        run_pipeline(data_path=self.test_data_dir)
-        output_path = "./output/threshold_breaks.csv"
-        self.assertTrue(os.path.exists(output_path))
-        
-        df_output = pd.read_csv(output_path)
-        for col in _BREACH_CSV_COLUMNS:
-            self.assertIn(col, df_output.columns)
-    #--BOUNDARY TESTS--
+        with tempfile.TemporaryDirectory() as tmp:
+            run_pipeline(data_path=self.test_data_dir, output_dir=tmp)
+            output_path = os.path.join(tmp, "threshold_breaks.csv")
+            self.assertTrue(os.path.exists(output_path))
+            df_output = pd.read_csv(output_path)
+            for col in _BREACH_CSV_COLUMNS:
+                self.assertIn(col, df_output.columns)
+    # --- BOUNDARY TESTS ---
     def test_boundary_dod_not_flagged_at_exactly_one_percent(self):
         """DoD uses strict > limit: exactly 1% default does not flag (per brief)."""
         input_data = {
@@ -353,6 +362,7 @@ class TestMarketPipeline(unittest.TestCase):
         self.assertEqual(exit_code_for_status("SUCCESS"), 0)
         self.assertEqual(exit_code_for_status("WARNING: Extreme Volatility"), 2)
         self.assertEqual(exit_code_for_status("REJECT: Missing Files"), 1)
+        self.assertEqual(exit_code_for_status("REJECT: Config not found"), 1)
 
     def test_cli_reject_uses_exit_code_one(self):
         repo_root = Path(__file__).resolve().parent.parent
@@ -516,7 +526,7 @@ class TestMarketPipeline(unittest.TestCase):
         row = data['processed_data']['DJCA'].iloc[0]
         self.assertEqual(str(row['observation_date'].date()), '2026-03-12')
         self.assertEqual(row['closing_price'], 100.0)
-    #--ALL TESTS PAST THIS POINT WERE SUGGESTED BY GEMINI HAS MISSING FROM TESTING SUITE--
+    # --- Tests below were suggested by Gemini (additional coverage) ---
     def test_empty_file(self):
         """TEST: Rejects if file empty"""
         input_data = {
@@ -650,6 +660,15 @@ class TestConfigValidation(unittest.TestCase):
             self.assertIn("Invalid config", status)
         finally:
             os.unlink(path)
+
+    def test_run_pipeline_rejects_missing_config_path(self):
+        missing = str(
+            Path(tempfile.gettempdir()) / "pass_fail_pipeline_no_such_config.yaml"
+        )
+        self.assertFalse(Path(missing).exists())
+        status, data = run_pipeline(data_path="./data", config_path=missing)
+        self.assertIsNone(data)
+        self.assertEqual(status, "REJECT: Config not found")
 
 
 if __name__ == '__main__':
