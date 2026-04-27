@@ -62,6 +62,8 @@ def validate_pipeline_config(config: object) -> None:
         for key, val in block.items():
             if not isinstance(key, str) or not key.strip():
                 raise ValueError(f"Invalid config: {name} has an invalid key {key!r}")
+            if key not in tickers:
+                raise ValueError(f"Invalid config: {name} has an invalid key {key!r}")
             _validate_fraction(f"{name}[{key!r}]", val)
 
     if "default_threshold_dod" in config:

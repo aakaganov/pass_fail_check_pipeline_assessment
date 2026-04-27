@@ -11,8 +11,9 @@ and CSV output.
 CLI exit codes (for shells and CI): 0 success, 1 reject / error, 2 warning.
 Use ``python main.py --help`` for flags.
 
-Disclosure: coding assistants (e.g. Cursor) were used for parts of this
-project; see README for detail. Per take-home policy, disclose in code here.
+Disclosure: coding assistants Cursor were used for parts of this
+project; used for debugging, polishing code, and expanding on missing functionality. 
+Per take-home policy, disclose in code here.
 """
 from __future__ import annotations
 
@@ -40,7 +41,7 @@ def exit_code_for_status(status: str) -> int:
 def run_pipeline(
     data_path="./data",
     enabled_checks=None,
-    *,
+    *, # cursor suggestion, keyword-only arguments
     config_path=None,
     output_dir=None,
     csv_path=None,
@@ -51,7 +52,7 @@ def run_pipeline(
 
     _default_config = Path(__file__).resolve().parent / "config.yaml"
     cfg = Path(config_path) if config_path is not None else _default_config
-
+    
     try:
         try:
             with open(cfg, "r", encoding="utf-8") as f:

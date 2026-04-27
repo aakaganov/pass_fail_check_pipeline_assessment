@@ -620,7 +620,7 @@ class TestConfigValidation(unittest.TestCase):
         validate_pipeline_config(
             {
                 "tickers": ["DJIA"],
-                "thresholds": {"SP500": 0.015},
+                "thresholds": {"DJIA": 0.015},
                 "checks": {"DoD": True, "WoW": False},
             }
         )
